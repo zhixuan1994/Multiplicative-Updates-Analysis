@@ -23,7 +23,6 @@ class MultiplicativeUpdates:
         if self.domain not in ['rectangle','disc', 'ellipse','linear']:
             raise ValueError('Only support domain of: rectangle, disc, ellipse, linear')
 
-            
     def M_matrix(self, A, b, v):
         A_p = np.where(A >= 0, A, 0)
         A_n = np.abs(np.where(A < 0, A, 0))
@@ -50,11 +49,14 @@ class MultiplicativeUpdates:
             a_list.append((U[i] - Mv[i]) / (v[i] - Mv[i]))
         a_list = np.array(a_list).reshape(-1,)
         a_list = a_list[a_list <= 1]
-        a_star_temp = np.max(a_list)
-        if a_star_temp < 0:
+        if len(a_list) == 0:
             return 0
         else:
-            return a_star_temp
+            a_star_temp = np.max(a_list)
+            if a_star_temp < 0:
+                return 0
+            else:
+                return a_star_temp
 
     def v_rectangle(self, M, v, L, U):
         Mv = np.dot(M, v)
@@ -140,7 +142,10 @@ class MultiplicativeUpdates:
         b = self.b
         run_am = self.run_am
         if self.domain == 'rectangle':
-            initial_val = np.mean([self.L_bounds, self.U_bounds],axis=0)
+            U_bounds_inf_mask = np.isinf(self.U_bounds)
+            U_bounds_temp = self.U_bounds.copy()
+            U_bounds_temp[U_bounds_inf_mask] = self.L_bounds[U_bounds_inf_mask] + 10
+            initial_val = np.mean([self.L_bounds, U_bounds_temp],axis=0)
             MU_out = self.main_rectangle(self.L_bounds, self.U_bounds, A, b, initial_val).reshape(-1,)
             for i in range(run_am):
                 MU_out = self.main_rectangle(self.L_bounds, self.U_bounds, A, b, MU_out).reshape(-1,)
