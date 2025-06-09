@@ -4,29 +4,11 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error
 from Multiply_updates import MultiplicativeUpdates
+from sklearn import linear_model
+import warnings
+# warnings.filterwarnings("ignore")
 
 ### Define the traditional PGD
-def simplex_lasso_project(x, z):
-    x_abs = np.abs(x)
-    if np.sum(x_abs) <= z:
-        return x
-    else:
-        u = np.sort(x_abs)[::-1]
-        u_cum = np.cumsum(u)
-        rho = np.where(u > (u_cum - z) / (np.arange(1, len(x)+1)))[0][-1]
-        theta = (u_cum[rho] - z) / (rho + 1)
-        return np.sign(x) * np.maximum(x_abs - theta, 0)
-    
-def pgd_lasso(x, c, A, b, run_am, linear_rate = 0.01, lambda_pgd=0, lambda_linear_rate=0.1):
-    obj = [x.reshape(-1,)]
-    for k in range(run_am):
-        grad = A @ x + b
-        x = x - linear_rate * grad
-        x = simplex_lasso_project(x, c)
-        lambda_pgd = lambda_pgd + lambda_linear_rate * (np.sum(x) - c)
-        obj.append(x.reshape(-1,))
-    return x
-
 def disc_project(x, center, r):
     dist_x_cent = x - center
     norm_sq = np.dot(dist_x_cent, dist_x_cent)
@@ -194,10 +176,8 @@ def run_main(ds, run_am=1000):
         low_bounds = low_bounds.astype('float')
         trad_ini_x = np.mean([low_bounds, upon_bounds], axis=0)
         low_bounds[np.random.choice(range(ds), size=(np.random.choice(range(1,ds))), replace=False)] = -np.inf    
-
         New_m_2 = split_flip_main_rect(low_bounds, upon_bounds, A, b, run_am)
         new_m_ex2.append(New_m_2.reshape(-1,))
-        
         Trad_m_2 = pgd_rectangle(trad_ini_x, low_bounds, upon_bounds, A, b, run_am)
         trad_m_ex2.append(Trad_m_2.reshape(-1,))
 
@@ -214,7 +194,9 @@ def run_main(ds, run_am=1000):
         A = Q.dot(np.diag(np.abs(np.random.randn(ds,)))).dot(np.transpose(Q))
         b = -A.dot(x_target)
         new_m_ex3.append(split_flip_main(A, b, c, run_am).reshape(-1,))
-        trad_m_ex3_lasso.append(pgd_lasso(np.zeros(shape=(ds,)), c, A, b, run_am).reshape(-1,))
+        clf = linear_model.Lasso(alpha=0.0001, fit_intercept=False)
+        clf.fit(A, -b)
+        trad_m_ex3_lasso.append(clf.coef_)
 
         # Ex4
         r = 1
@@ -226,14 +208,13 @@ def run_main(ds, run_am=1000):
             x_target = orignal_center + np.random.uniform(-1/k,1/k,size=(ds,))
             k = k+0.2
         target_ex4.append(x_target)
-
         temp = np.random.normal(0,1, size=(ds, ds))
         A = np.dot(temp, np.transpose(temp))
         b = -A.dot(x_target)
         new_m_ex4.append(constant_shift(A, b, shift_cons, orignal_center, r, run_am).reshape(-1,))
-        
-        trad_m_ex4_ridge.append(pgd_disc(orignal_center, orignal_center, r, A, b, run_am).reshape(-1,))
-
+        clf = linear_model.Ridge(alpha=0.0001, fit_intercept=False)
+        clf.fit(A, -b)
+        trad_m_ex4_ridge.append(clf.coef_)
         
     return [np.array(target_ex1), np.array(new_m_ex1), np.array(trad_m_ex1)],\
            [np.array(target_ex2), np.array(new_m_ex2), np.array(trad_m_ex2)],\
@@ -303,8 +284,9 @@ for i in tqdm(range(300)):
     b = -A.dot(x_target_ridge)
     new_m_ex3_temp = split_flip_main(A, b, 1, 800)
     new_m_ex3.append(new_m_ex3_temp.reshape(-1,))
-    Trad_m_1 = pgd_lasso(np.zeros(shape=(3,)), 1, A, b, 800)
-    trad_m_ex3_lasso.append(Trad_m_1.reshape(-1,))
+    clf = linear_model.Lasso(alpha=0.0001, fit_intercept=False)
+    clf.fit(A, -b)
+    trad_m_ex3_lasso.append(clf.coef_)
 
 x_target_ridge = np.array([-0.6, 0, 0.7])
 new_m_ex4, trad_m_ex4_ridge = [], []
@@ -315,8 +297,9 @@ for i in tqdm(range(300)):
     b = -A.dot(x_target_ridge)
     new_m_ex4_temp = constant_shift(A, b, 1, np.zeros(shape=(3,)), 1, 800)
     new_m_ex4.append(new_m_ex4_temp.reshape(-1,))
-    Trad_m_1 = pgd_disc(np.zeros(shape=(3,)), np.zeros(shape=(3,)), 1, A, b, 800)
-    trad_m_ex4_ridge.append(Trad_m_1.reshape(-1,))
+    clf = linear_model.Ridge(alpha=0.0001, fit_intercept=False)
+    clf.fit(A, -b)
+    trad_m_ex4_ridge.append(clf.coef_)
 
 fig, ax = plt.subplots(layout='constrained', nrows=2, ncols=2, figsize=(10, 6))
 fig.suptitle('v estimation of MU  vs Lasso & Ridge', fontsize=16, fontweight="bold", y=1.08)
